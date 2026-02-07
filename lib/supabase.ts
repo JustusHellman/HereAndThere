@@ -13,7 +13,18 @@ const supabaseAnonKey = process.env.HERE_AND_THERE_SUPABASE_ANON_KEY || 'placeho
  * This flag allows the UI to show a helpful "Configuration Required" 
  * state instead of simply failing silently.
  */
-export const isSupabaseConfigured = !!(process.env.HERE_AND_THERE_SUPABASE_URL && process.env.HERE_AND_THERE_SUPABASE_ANON_KEY);
+export const isSupabaseConfigured = !!(
+  process.env.HERE_AND_THERE_SUPABASE_URL && 
+  process.env.HERE_AND_THERE_SUPABASE_URL !== '' &&
+  process.env.HERE_AND_THERE_SUPABASE_ANON_KEY &&
+  process.env.HERE_AND_THERE_SUPABASE_ANON_KEY !== ''
+);
+
+if (!isSupabaseConfigured) {
+  console.warn("Supabase is not configured. Using placeholder URL. Ensure HERE_AND_THERE_SUPABASE_URL and HERE_AND_THERE_SUPABASE_ANON_KEY are set in GitHub Secrets.");
+} else {
+  console.log("Supabase configuration detected successfully.");
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 

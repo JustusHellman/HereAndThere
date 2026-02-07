@@ -8,8 +8,10 @@ export default defineConfig({
   // This ensures assets like /index.js are correctly mapped to /HereAndThere/index.js
   base: '/HereAndThere/',
   define: {
-    // This allows process.env to work in the browser during the build
-    'process.env': process.env
+    // We explicitly define only the necessary environment variables.
+    // Using JSON.stringify ensures the values are injected as quoted strings in the final bundle.
+    'process.env.HERE_AND_THERE_SUPABASE_URL': JSON.stringify(process.env.HERE_AND_THERE_SUPABASE_URL || ''),
+    'process.env.HERE_AND_THERE_SUPABASE_ANON_KEY': JSON.stringify(process.env.HERE_AND_THERE_SUPABASE_ANON_KEY || ''),
   },
   build: {
     outDir: 'dist',
