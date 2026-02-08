@@ -25,6 +25,7 @@ const App: React.FC = () => {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null); 
   const [isJoining, setIsJoining] = useState(false);
+  const [hasBeenAccepted, setHasBeenAccepted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const joinTimeoutRef = useRef<number | null>(null);
 
@@ -84,19 +85,36 @@ const App: React.FC = () => {
     if (gameState && (isHost || currentPlayer)) {
       const inGameStatus = ['PLAYING', 'COUNTDOWN', 'RESULTS', 'SCOREBOARD', 'FINISHED'];
       
+      // Auto-transition to board if game is active
       if (inGameStatus.includes(gameState.status) && view !== 'PLAYING') {
         setView('PLAYING');
       }
 
-      if (currentPlayer && !isHost && !isJoining) {
+      // Player-side logic: Detect if we've been accepted or kicked
+      if (currentPlayer && !isHost) {
         const isPresent = gameState.players.some(p => p.id === currentPlayer.id);
-        if (!isPresent && (view === 'LOBBY' || view === 'PLAYING')) {
+        
+        // Success: We see ourselves in the host's list
+        if (isPresent && !hasBeenAccepted) {
+          setHasBeenAccepted(true);
+          setIsJoining(false);
+          if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
+        }
+
+        // Failure: We were in, but now we are gone (Kicked)
+        if (hasBeenAccepted && !isPresent && (view === 'LOBBY' || view === 'PLAYING')) {
            alert(strings.lobby.kickedDesc);
+           handleExitGame();
+        }
+
+        // Timeout: We requested to join but never appeared
+        if (!isJoining && !hasBeenAccepted && view === 'LOBBY') {
+           setJoinError("Connection timeout. Host did not acknowledge join request.");
            handleExitGame();
         }
       }
     }
-  }, [gameState?.status, currentPlayer, isHost, view, isJoining, gameState?.players]);
+  }, [gameState?.status, currentPlayer, isHost, view, isJoining, hasBeenAccepted, gameState?.players]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('locateit_user');
@@ -157,6 +175,8 @@ const App: React.FC = () => {
     const existingById = gameState.players.find(p => p.id === savedId);
     if (existingById) {
       setCurrentPlayer(existingById);
+      setHasBeenAccepted(true);
+      setIsJoining(false);
       setIsHost(false);
       setView(gameState.status === 'LOBBY' ? 'LOBBY' : 'PLAYING');
       return;
@@ -164,10 +184,14 @@ const App: React.FC = () => {
 
     const newPlayer: Player = { id: generateId(), name, color, score: 0, hasGuessed: false };
     setCurrentPlayer(newPlayer);
+    setHasBeenAccepted(false);
     setIsHost(false);
     setIsJoining(true);
+    
     if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
-    joinTimeoutRef.current = window.setTimeout(() => setIsJoining(false), 5000);
+    // Increased timeout to 10s to handle latent broadcasts
+    joinTimeoutRef.current = window.setTimeout(() => setIsJoining(false), 10000);
+    
     localStorage.setItem('locateit_last_player_id', newPlayer.id);
     sendAction({ type: 'PLAYER_JOIN_REQUEST', player: newPlayer });
     setView('LOBBY');
@@ -181,6 +205,7 @@ const App: React.FC = () => {
     clearCache();
     dispatch({ type: 'EXIT_GAME' });
     setCurrentPlayer(null);
+    setHasBeenAccepted(false);
     setJoinCode(null);
     setView(isHost ? 'DASHBOARD' : 'HOME');
   };
