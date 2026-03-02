@@ -36,6 +36,17 @@ const App: React.FC = () => {
   const { trails, saveTrail, deleteTrail, isLoading: isTrailsLoading } = useTrails(user);
   const [gameState, dispatch] = useReducer(gameReducer, null);
 
+  // Sync view with game status (for both host and players)
+  useEffect(() => {
+    if (!gameState) return;
+    const isInGameView = view === 'PLAYING';
+    const shouldBeInGameView = ['PLAYING', 'RESULTS', 'SCOREBOARD', 'COUNTDOWN', 'FINISHED'].includes(gameState.status);
+    
+    if (shouldBeInGameView && !isInGameView && (view === 'LOBBY' || view === 'JOIN')) {
+      setView('PLAYING');
+    }
+  }, [gameState?.status, view]);
+
   // handleExitGame is defined here and uses sendActionRef to avoid "used before declaration" error
   const handleExitGame = useCallback((silent = false) => {
     // 1. Snapshot the player identity before clearing
@@ -73,7 +84,7 @@ const App: React.FC = () => {
         alert(strings.lobby.kickedDesc);
         handleExitGame(true);
       }
-    }, [currentPlayer, handleExitGame]),
+    }, [currentPlayer?.id, handleExitGame]),
     useCallback(() => {
       // Session Ended: Host disconnected explicitly
       handleExitGame(true);
@@ -249,8 +260,8 @@ const App: React.FC = () => {
           currentPlayer={currentPlayer} 
           onBack={() => handleExitGame()} 
           onKick={(id) => {
-            dispatch({ type: 'KICK_PLAYER', payload: id });
             sendAction({ type: 'PLAYER_KICKED', targetId: id });
+            dispatch({ type: 'KICK_PLAYER', payload: id });
           }} 
         />
       )}
