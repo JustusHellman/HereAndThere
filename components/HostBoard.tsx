@@ -18,6 +18,7 @@ interface HostBoardProps {
   onShowScoreboard: () => void;
   onNext: () => void;
   onSetCanProceed: (can: boolean) => void;
+  onExitRequest?: () => void;
 }
 
 const HostBoard: React.FC<HostBoardProps> = ({ 
@@ -31,7 +32,8 @@ const HostBoard: React.FC<HostBoardProps> = ({
   onForceReveal, 
   onShowScoreboard, 
   onNext,
-  onSetCanProceed
+  onSetCanProceed,
+  onExitRequest
 }) => {
   const [isFullscreenImage, setIsFullscreenImage] = useState(false);
   const [showForceConfirm, setShowForceConfirm] = useState(false);
@@ -77,6 +79,15 @@ const HostBoard: React.FC<HostBoardProps> = ({
             <span className="text-[10px] font-black uppercase tracking-[0.5em] text-[#8c6b4f]">
               {strings.lobby.host} <span className="opacity-30 ml-2 tracking-widest">#{gameState.id}</span>
             </span>
+            <button 
+              onClick={onExitRequest}
+              className="p-2 text-[#0f1a16]/20 hover:text-red-500 transition-colors"
+              title="Terminate Game"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
           <h2 className="text-2xl font-black uppercase tracking-tight">{isRoundFinished ? strings.game.roundResults : isScoreboard ? "Standings" : "In Progress"}</h2>
         </div>

@@ -20,19 +20,6 @@ const Lobby: React.FC<LobbyProps> = ({ gameState, isHost, onStart, currentPlayer
 
   return (
     <div className="min-h-screen bg-[#f9fbfa] flex flex-col text-[#0f1a16] selection:bg-[#8c6b4f]/20 relative">
-      {/* Exit/Terminate Button */}
-      <div className="fixed top-6 left-6 z-[2000]">
-        <button 
-          onClick={() => setShowExitConfirm(true)}
-          className="w-10 h-10 bg-white/80 backdrop-blur-md rounded-xl flex items-center justify-center text-[#0f1a16]/40 hover:text-red-500 hover:bg-white shadow-lg border border-black/5 transition-all"
-          title={isHost ? "Terminate Game" : "Exit Game"}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-        </button>
-      </div>
-
       {/* Confirmation Modal */}
       {showExitConfirm && (
         <div className="fixed inset-0 z-[3000] bg-[#0f1a16]/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">

@@ -16,6 +16,7 @@ interface PlayerBoardProps {
   playerMapConfig: { center: Location, zoom: number };
   onGuess: (loc: Location) => void;
   onUnlock: () => void;
+  onExitRequest?: () => void;
 }
 
 const PlayerBoard: React.FC<PlayerBoardProps> = ({ 
@@ -27,15 +28,43 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
   isLastRound,
   playerMapConfig,
   onGuess, 
-  onUnlock 
+  onUnlock,
+  onExitRequest
 }) => {
   const [selectedGuess, setSelectedGuess] = useState<Location | null>(null);
   const [isFullscreenImage, setIsFullscreenImage] = useState(false);
 
+  // Restore guess from localStorage on mount
+  useEffect(() => {
+    const savedGuess = localStorage.getItem('locateit_saved_guess');
+    const savedRound = localStorage.getItem('locateit_saved_round');
+    if (savedGuess && savedRound === String(gameState.currentQuestionIndex)) {
+      setSelectedGuess(JSON.parse(savedGuess));
+    }
+  }, [gameState.currentQuestionIndex]);
+
+  // Save guess to localStorage when it changes
+  const handleSetGuess = (loc: Location) => {
+    setSelectedGuess(loc);
+    localStorage.setItem('locateit_saved_guess', JSON.stringify(loc));
+    localStorage.setItem('locateit_saved_round', String(gameState.currentQuestionIndex));
+  };
+
   // Clear local marker when the round changes
   useEffect(() => {
-    setSelectedGuess(null);
+    // Only clear if it's a new round
+    const savedRound = localStorage.getItem('locateit_saved_round');
+    if (savedRound !== String(gameState.currentQuestionIndex)) {
+      setSelectedGuess(null);
+      localStorage.removeItem('locateit_saved_guess');
+    }
   }, [gameState.currentQuestionIndex]);
+
+  const handleUnlock = () => {
+    localStorage.removeItem('locateit_saved_guess');
+    setSelectedGuess(null);
+    onUnlock();
+  };
 
   const matchingPlayer = gameState.players.find(p => p.id === currentPlayer?.id);
   const hasSubmitted = !!matchingPlayer?.hasGuessed;
@@ -50,7 +79,8 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
       color: p.color 
     }))
   ] : [
-    ...(selectedGuess ? [{ position: selectedGuess, label: strings.game.yourGuess, icon: 'user' as const, color: currentPlayer?.color }] : [])
+    ...(hasSubmitted && matchingPlayer?.lastGuess ? [{ position: matchingPlayer.lastGuess, label: strings.game.yourGuess, icon: 'user' as const, color: currentPlayer?.color }] : []),
+    ...(!hasSubmitted && selectedGuess ? [{ position: selectedGuess, label: strings.game.yourGuess, icon: 'user' as const, color: currentPlayer?.color }] : [])
   ];
 
   const lines = isRoundFinished ? gameState.players.filter(p => p.lastGuess).map(p => ({ 
@@ -62,7 +92,18 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
   return (
     <div className="h-screen flex flex-col bg-[#f9fbfa] overflow-hidden selection:bg-[#8c6b4f]/20">
       <div className="bg-white/70 backdrop-blur-xl rounded-b-[2rem] p-5 shadow-sm border-b border-[#2d4239]/5 flex justify-between items-center z-[100] shrink-0">
-          <div className="font-black text-[10px] uppercase tracking-[0.4em] text-[#8c6b4f]">{strings.game.locationCounter(gameState.currentQuestionIndex + 1, gameState.questions.length)}</div>
+          <div className="flex items-center space-x-4">
+            <button 
+              onClick={onExitRequest}
+              className="p-2 -ml-2 text-[#0f1a16]/20 hover:text-red-500 transition-colors"
+              title="Exit Game"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="font-black text-[10px] uppercase tracking-[0.4em] text-[#8c6b4f]">{strings.game.locationCounter(gameState.currentQuestionIndex + 1, gameState.questions.length)}</div>
+          </div>
           <div className="flex items-center space-x-6">
              <div className="flex -space-x-3">
                 {gameState.players.map(p => (
@@ -110,7 +151,7 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
               <div className="flex-1 relative bg-white rounded-[3rem] shadow-[0_40px_80px_-20px_rgba(45,66,57,0.1)] border border-[#2d4239]/5 overflow-hidden transition-all">
                 <Map 
                   key={gameState.currentQuestionIndex}
-                  onLocationSelect={isRoundFinished || hasSubmitted ? undefined : setSelectedGuess}
+                  onLocationSelect={isRoundFinished || hasSubmitted ? undefined : handleSetGuess}
                   markers={markers}
                   lines={lines}
                   center={playerMapConfig.center}
@@ -137,7 +178,7 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
                        <div className="w-3.5 h-3.5 bg-[#10b981] rounded-full flex items-center justify-center text-white shadow-lg"><svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" /></svg></div>
                        <span className="font-black text-[8px] uppercase tracking-[0.2em] text-[#0f1a16]">{strings.game.waitingHost}</span>
                      </div>
-                     <button onClick={onUnlock} className="bg-white/60 hover:bg-white text-[7px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg transition-all border border-black/5">{strings.game.unlockGuess}</button>
+                     <button onClick={handleUnlock} className="bg-white/60 hover:bg-white text-[7px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg transition-all border border-black/5">{strings.game.unlockGuess}</button>
                    </div>
                 )}
               </div>

@@ -131,7 +131,7 @@ const App: React.FC = () => {
 
   // Player: Sync loop when waiting for game data
   useEffect(() => {
-    if ((view === 'JOIN' || view === 'LOBBY') && !isHost && joinCode) {
+    if (view === 'LOBBY' && !isHost && joinCode) {
       const interval = setInterval(requestSync, 4000);
       return () => clearInterval(interval);
     }
@@ -150,7 +150,7 @@ const App: React.FC = () => {
 
   // Auto-rejoin logic for players
   useEffect(() => {
-    if (gameState && !isHost && !currentPlayer && view === 'JOIN') {
+    if (gameState && !isHost && !currentPlayer && (view === 'JOIN' || view === 'LOBBY' || view === 'PLAYING')) {
       const savedId = localStorage.getItem('locateit_last_player_id');
       const savedCode = localStorage.getItem('locateit_active_game_code');
       
@@ -160,6 +160,15 @@ const App: React.FC = () => {
           setCurrentPlayer(existing);
           setIsJoining(false);
           setIsRejoining(false);
+          
+          // Restore guess if it's the same round
+          const savedGuess = localStorage.getItem('locateit_saved_guess');
+          const savedRound = localStorage.getItem('locateit_saved_round');
+          if (savedGuess && savedRound === String(gameState.currentQuestionIndex)) {
+            // The PlayerBoard will handle the actual marker display if it's in the gameState
+            // but we might need to sync local state if they haven't submitted yet.
+          }
+          
           setView(gameState.status === 'LOBBY' ? 'LOBBY' : 'PLAYING');
         }
       }
@@ -227,42 +236,61 @@ const App: React.FC = () => {
     setJoinError(null);
     const code = gameCode.trim().toUpperCase();
     
-    if (!gameState || gameState.id !== code) {
-      setJoinError(`Searching for Expedition ${code}... Ensure the host has started the lobby.`);
-      requestSync();
-      return;
-    }
-
-    const savedId = localStorage.getItem('locateit_last_player_id');
-    const existingById = gameState.players.find(p => p.id === savedId);
+    // Manual sync request on join attempt
+    requestSync();
     
-    if (existingById) {
-      setCurrentPlayer(existingById);
-      setIsJoining(false);
-      setIsHost(false);
-      setView(gameState.status === 'LOBBY' ? 'LOBBY' : 'PLAYING');
-      return;
-    }
-
-    const newPlayer: Player = { id: generateId(), name, color, score: 0, hasGuessed: false };
-    setCurrentPlayer(newPlayer);
-    setIsHost(false);
+    // We'll wait for the next sync to actually process the join
+    // But we set the code so useGameSync knows which channel to listen to
+    setJoinCode(code);
     setIsJoining(true);
-    
+
+    // Watchdog for join
     if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
-    joinTimeoutRef.current = window.setTimeout(() => setIsJoining(false), 20000);
-    
-    localStorage.setItem('locateit_last_player_id', newPlayer.id);
-    localStorage.setItem('locateit_active_game_code', code);
-    sendAction({ type: 'PLAYER_JOIN_REQUEST', player: newPlayer });
-    setView('LOBBY');
+    joinTimeoutRef.current = window.setTimeout(() => {
+      setIsJoining(false);
+      if (!gameState || gameState.id !== code) {
+        setJoinError(`Could not find Expedition ${code}. Check the code and try again.`);
+      }
+    }, 5000);
+
+    // Store intent to join
+    const joinIntent = { name, color, code };
+    localStorage.setItem('locateit_join_intent', JSON.stringify(joinIntent));
   };
+
+  // Process join intent when gameState arrives
+  useEffect(() => {
+    const intentStr = localStorage.getItem('locateit_join_intent');
+    if (intentStr && gameState && !isHost && !currentPlayer) {
+      const intent = JSON.parse(intentStr);
+      if (intent.code === gameState.id) {
+        const savedId = localStorage.getItem('locateit_last_player_id');
+        const existingById = gameState.players.find(p => p.id === savedId);
+        
+        if (existingById) {
+          setCurrentPlayer(existingById);
+          setIsJoining(false);
+          localStorage.removeItem('locateit_join_intent');
+          setView(gameState.status === 'LOBBY' ? 'LOBBY' : 'PLAYING');
+          return;
+        }
+
+        const newPlayer: Player = { id: generateId(), name: intent.name, color: intent.color, score: 0, hasGuessed: false };
+        setCurrentPlayer(newPlayer);
+        localStorage.setItem('locateit_last_player_id', newPlayer.id);
+        localStorage.setItem('locateit_active_game_code', intent.code);
+        localStorage.removeItem('locateit_join_intent');
+        sendAction({ type: 'PLAYER_JOIN_REQUEST', player: newPlayer });
+        setView(gameState.status === 'LOBBY' ? 'LOBBY' : 'PLAYING');
+      }
+    }
+  }, [gameState, isHost, currentPlayer, sendAction]);
 
   return (
     <>
       {showPermissionModal && <PermissionModal onClose={() => setShowPermissionModal(false)} />}
       {view === 'HOME' && <Home onJoin={() => setView('JOIN')} onDesign={() => user ? setView('DASHBOARD') : setView('AUTH')} />}
-      {view === 'JOIN' && <JoinGame prefilledCode={joinCode || ''} onBack={() => handleExitGame()} onJoin={handleJoinGame} onCodeChange={setJoinCode} isSearching={!gameState && !!joinCode} isRejoining={isRejoining} error={joinError} />}
+      {view === 'JOIN' && <JoinGame prefilledCode={joinCode || ''} onBack={() => { handleExitGame(); setJoinCode(null); }} onJoin={handleJoinGame} onCodeChange={setJoinCode} isSearching={isJoining} isRejoining={isRejoining} error={joinError} />}
       {view === 'AUTH' && <Auth onAuthSuccess={(u) => { setUser(u); setView('DASHBOARD'); }} onBack={() => setView('HOME')} />}
       {view === 'DASHBOARD' && user && (
         <Dashboard 
