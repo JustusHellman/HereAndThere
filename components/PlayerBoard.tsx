@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { GameState, Player, Location, Question } from '../types';
 import { formatDistance } from '../utils';
 import { strings } from '../i18n';
@@ -44,11 +44,11 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
   }, [gameState.currentQuestionIndex]);
 
   // Save guess to localStorage when it changes
-  const handleSetGuess = (loc: Location) => {
+  const handleSetGuess = useCallback((loc: Location) => {
     setSelectedGuess(loc);
     localStorage.setItem('locateit_saved_guess', JSON.stringify(loc));
     localStorage.setItem('locateit_saved_round', String(gameState.currentQuestionIndex));
-  };
+  }, [gameState.currentQuestionIndex]);
 
   // Clear local marker when the round changes
   useEffect(() => {
@@ -60,17 +60,17 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
     }
   }, [gameState.currentQuestionIndex]);
 
-  const handleUnlock = () => {
+  const handleUnlock = useCallback(() => {
     localStorage.removeItem('locateit_saved_guess');
     setSelectedGuess(null);
     onUnlock();
-  };
+  }, [onUnlock]);
 
   const matchingPlayer = gameState.players.find(p => p.id === currentPlayer?.id);
   const hasSubmitted = !!matchingPlayer?.hasGuessed;
   const currentTotalScore = matchingPlayer?.score || 0;
 
-  const markers = isRoundFinished ? [
+  const markers = useMemo(() => isRoundFinished ? [
     { position: currentQ.location, label: strings.game.actualLocation, icon: 'target' as const },
     ...gameState.players.filter(p => p.lastGuess).map(p => ({ 
       position: p.lastGuess!, 
@@ -81,13 +81,13 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
   ] : [
     ...(hasSubmitted && matchingPlayer?.lastGuess ? [{ position: matchingPlayer.lastGuess, label: strings.game.yourGuess, icon: 'user' as const, color: currentPlayer?.color }] : []),
     ...(!hasSubmitted && selectedGuess ? [{ position: selectedGuess, label: strings.game.yourGuess, icon: 'user' as const, color: currentPlayer?.color }] : [])
-  ];
+  ], [isRoundFinished, currentQ.location, gameState.players, currentPlayer, hasSubmitted, matchingPlayer, selectedGuess]);
 
-  const lines = isRoundFinished ? gameState.players.filter(p => p.lastGuess).map(p => ({ 
+  const lines = useMemo(() => isRoundFinished ? gameState.players.filter(p => p.lastGuess).map(p => ({ 
     from: p.lastGuess!, 
     to: currentQ.location, 
     color: p.color 
-  })) : [];
+  })) : [], [isRoundFinished, gameState.players, currentQ.location]);
 
   return (
     <div className="h-screen flex flex-col bg-[#f9fbfa] overflow-hidden selection:bg-[#8c6b4f]/20">
@@ -99,7 +99,7 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
               title="Exit Game"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
             </button>
             <div className="font-black text-[10px] uppercase tracking-[0.4em] text-[#8c6b4f]">{strings.game.locationCounter(gameState.currentQuestionIndex + 1, gameState.questions.length)}</div>

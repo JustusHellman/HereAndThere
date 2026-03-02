@@ -30,6 +30,11 @@ const Map: React.FC<MapProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<L.Map | null>(null);
 
+  const onLocationSelectRef = useRef(onLocationSelect);
+  useEffect(() => {
+    onLocationSelectRef.current = onLocationSelect;
+  }, [onLocationSelect]);
+
   useEffect(() => {
     if (!mapContainerRef.current || map) return;
 
@@ -51,10 +56,8 @@ const Map: React.FC<MapProps> = ({
     }).addTo(instance);
 
     instance.on('click', (e) => {
-      // Force refresh on every click as a safety measure for mobile browsers
-      instance.invalidateSize();
-      if (onLocationSelect) {
-        onLocationSelect({ lat: e.latlng.lat, lng: e.latlng.lng });
+      if (onLocationSelectRef.current) {
+        onLocationSelectRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
       }
     });
 

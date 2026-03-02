@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { strings } from '../i18n';
 
 interface JoinGameProps {
@@ -26,19 +26,13 @@ const availableColors = [
   '#dcfea9', // Off-White
 ];
 
-const customPalette = [
-  '#ffffff', '#f8fafc', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8', '#64748b', '#475569',
-  '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6',
-  '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
-  '#f43f5e', '#71717a', '#52525b', '#3f3f46', '#27272a', '#18181b', '#09090b', '#000000'
-];
-
 const JoinGame: React.FC<JoinGameProps> = ({ onBack, onJoin, onCodeChange, isSearching, isRejoining, error, prefilledCode }) => {
   const [code, setCode] = useState(prefilledCode || '');
   const [name, setName] = useState('');
   const [selectedColor, setSelectedColor] = useState(availableColors[0]);
   const [customColor, setCustomColor] = useState('#ffffff');
   const [isCustomColor, setIsCustomColor] = useState(false);
+  const colorInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (prefilledCode) {
@@ -118,8 +112,20 @@ const JoinGame: React.FC<JoinGameProps> = ({ onBack, onJoin, onCodeChange, isSea
                 
                 {/* Custom Color Slot */}
                 <div className="relative">
+                  <input 
+                    type="color"
+                    ref={colorInputRef}
+                    value={customColor}
+                    onChange={(e) => {
+                      setCustomColor(e.target.value);
+                      setIsCustomColor(true);
+                    }}
+                    className="sr-only"
+                  />
                   <button 
-                    onClick={() => setIsCustomColor(true)}
+                    onClick={() => {
+                      colorInputRef.current?.click();
+                    }}
                     className={`w-8 h-8 rounded-full transition-all active:scale-90 flex items-center justify-center overflow-hidden border-2 ${isCustomColor ? 'ring-4 ring-black/10 scale-110 shadow-lg border-white' : 'opacity-40 hover:opacity-100 border-dashed border-[#0f1a16]/20'}`}
                     style={{ 
                       backgroundColor: isCustomColor ? customColor : 'transparent',
@@ -136,33 +142,6 @@ const JoinGame: React.FC<JoinGameProps> = ({ onBack, onJoin, onCodeChange, isSea
                   </button>
                 </div>
               </div>
-
-              {/* Custom Color Board */}
-              {isCustomColor && (
-                <div className="bg-[#f9fbfa] rounded-2xl p-4 border border-black/5 animate-in slide-in-from-top-2 duration-200">
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="text-[8px] font-black text-[#0f1a16]/30 uppercase tracking-widest">Color Board</span>
-                    <div className="relative w-6 h-6 rounded-lg overflow-hidden border border-black/10">
-                      <input 
-                        type="color" 
-                        value={customColor}
-                        onChange={(e) => setCustomColor(e.target.value)}
-                        className="absolute inset-[-4px] w-[calc(100%+8px)] h-[calc(100%+8px)] cursor-pointer"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-8 gap-1.5">
-                    {customPalette.map(c => (
-                      <button 
-                        key={c}
-                        onClick={() => setCustomColor(c)}
-                        className={`w-full aspect-square rounded-md transition-all ${customColor === c ? 'ring-2 ring-[#0f1a16] scale-110 z-10' : 'hover:scale-110'}`}
-                        style={{ backgroundColor: c }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
             <button 
               onClick={() => onJoin(code, name, isCustomColor ? customColor : selectedColor)} 
