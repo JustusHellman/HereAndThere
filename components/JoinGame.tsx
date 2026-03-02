@@ -7,13 +7,14 @@ interface JoinGameProps {
   onJoin: (code: string, name: string, color: string) => void;
   onCodeChange?: (code: string) => void;
   isSearching: boolean;
+  isRejoining?: boolean;
   error: string | null;
   prefilledCode?: string;
 }
 
 const availableColors = ['#6366f1', '#0d9488', '#10b981', '#f59e0b', '#06b6d4', '#d946ef', '#8b5cf6', '#f97316'];
 
-const JoinGame: React.FC<JoinGameProps> = ({ onBack, onJoin, onCodeChange, isSearching, error, prefilledCode }) => {
+const JoinGame: React.FC<JoinGameProps> = ({ onBack, onJoin, onCodeChange, isSearching, isRejoining, error, prefilledCode }) => {
   const [code, setCode] = useState(prefilledCode || '');
   const [name, setName] = useState('');
   const [selectedColor, setSelectedColor] = useState(availableColors[0]);
@@ -34,7 +35,16 @@ const JoinGame: React.FC<JoinGameProps> = ({ onBack, onJoin, onCodeChange, isSea
   }, [code, onCodeChange]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#f9fbfa]">
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#f9fbfa] relative">
+      {isRejoining && (
+        <div className="fixed inset-0 z-[50] bg-[#f9fbfa]/80 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in duration-500">
+          <div className="w-16 h-16 bg-white rounded-[2rem] shadow-xl flex items-center justify-center mb-6 animate-bounce">
+             <div className="w-6 h-6 border-4 border-[#2d4239] border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <p className="text-[#2d4239]/40 font-black uppercase tracking-[0.4em] text-[10px]">Reconnecting to Expedition...</p>
+        </div>
+      )}
+
       <div className="max-w-md w-full">
         <button onClick={onBack} className="mb-8 text-[#0f1a16]/40 hover:text-[#0f1a16] flex items-center font-bold text-xs uppercase tracking-widest transition-all">
            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>

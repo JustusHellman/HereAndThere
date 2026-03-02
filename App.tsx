@@ -25,6 +25,7 @@ const App: React.FC = () => {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null); 
   const [isJoining, setIsJoining] = useState(false);
+  const [isRejoining, setIsRejoining] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
   // Use a ref for sendAction to break the circular dependency with handleExitGame
@@ -58,6 +59,7 @@ const App: React.FC = () => {
     setCurrentPlayer(null);
     setIsJoining(false);
     setJoinCode(null);
+    localStorage.removeItem('locateit_active_game_code');
     dispatch({ type: 'EXIT_GAME' });
 
     // 3. Notify the network via the ref
@@ -87,6 +89,7 @@ const App: React.FC = () => {
     }, [currentPlayer?.id, handleExitGame]),
     useCallback(() => {
       // Session Ended: Host disconnected explicitly
+      alert("The expedition has been terminated by the host.");
       handleExitGame(true);
     }, [handleExitGame])
   );
@@ -145,9 +148,39 @@ const App: React.FC = () => {
     }
   }, [gameState?.players, currentPlayer, isHost, isJoining]);
 
+  // Auto-rejoin logic for players
+  useEffect(() => {
+    if (gameState && !isHost && !currentPlayer && view === 'JOIN') {
+      const savedId = localStorage.getItem('locateit_last_player_id');
+      const savedCode = localStorage.getItem('locateit_active_game_code');
+      
+      if (savedId && savedCode === gameState.id) {
+        const existing = gameState.players.find(p => p.id === savedId);
+        if (existing) {
+          setCurrentPlayer(existing);
+          setIsJoining(false);
+          setIsRejoining(false);
+          setView(gameState.status === 'LOBBY' ? 'LOBBY' : 'PLAYING');
+        }
+      }
+    }
+  }, [gameState, isHost, currentPlayer, view]);
+
   useEffect(() => {
     const savedUser = localStorage.getItem('locateit_user');
     if (savedUser) setUser(JSON.parse(savedUser));
+    
+    // Check for active player session
+    const savedCode = localStorage.getItem('locateit_active_game_code');
+    const savedHostState = localStorage.getItem('locateit_active_host_state');
+    
+    if (savedHostState) {
+      handleResumeHost();
+    } else if (savedCode) {
+      setJoinCode(savedCode);
+      setIsRejoining(true);
+      setView('JOIN');
+    }
   }, []);
 
   const handleCompleteTrail = async (questions: Question[], name: string, startingView?: { center: Location, zoom: number }) => {
@@ -220,6 +253,7 @@ const App: React.FC = () => {
     joinTimeoutRef.current = window.setTimeout(() => setIsJoining(false), 20000);
     
     localStorage.setItem('locateit_last_player_id', newPlayer.id);
+    localStorage.setItem('locateit_active_game_code', code);
     sendAction({ type: 'PLAYER_JOIN_REQUEST', player: newPlayer });
     setView('LOBBY');
   };
@@ -228,7 +262,7 @@ const App: React.FC = () => {
     <>
       {showPermissionModal && <PermissionModal onClose={() => setShowPermissionModal(false)} />}
       {view === 'HOME' && <Home onJoin={() => setView('JOIN')} onDesign={() => user ? setView('DASHBOARD') : setView('AUTH')} />}
-      {view === 'JOIN' && <JoinGame prefilledCode={joinCode || ''} onBack={() => setView('HOME')} onJoin={handleJoinGame} onCodeChange={setJoinCode} isSearching={!gameState && !!joinCode} error={joinError} />}
+      {view === 'JOIN' && <JoinGame prefilledCode={joinCode || ''} onBack={() => handleExitGame()} onJoin={handleJoinGame} onCodeChange={setJoinCode} isSearching={!gameState && !!joinCode} isRejoining={isRejoining} error={joinError} />}
       {view === 'AUTH' && <Auth onAuthSuccess={(u) => { setUser(u); setView('DASHBOARD'); }} onBack={() => setView('HOME')} />}
       {view === 'DASHBOARD' && user && (
         <Dashboard 

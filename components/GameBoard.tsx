@@ -36,6 +36,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
 }) => {
   const [canProceed, setCanProceed] = useState(false);
   const [countdownValue, setCountdownValue] = useState(3);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   
   const currentQ = gameState.questions[gameState.currentQuestionIndex];
   const isCountingDown = gameState.status === 'COUNTDOWN';
@@ -119,7 +120,50 @@ const GameBoard: React.FC<GameBoardProps> = ({
   }
 
   return (
-    <div className="h-screen bg-[#f9fbfa] overflow-hidden">
+    <div className="h-screen bg-[#f9fbfa] overflow-hidden relative">
+      {/* Exit/Terminate Button */}
+      <div className="fixed top-6 left-6 z-[2000]">
+        <button 
+          onClick={() => setShowExitConfirm(true)}
+          className="w-10 h-10 bg-white/80 backdrop-blur-md rounded-xl flex items-center justify-center text-[#0f1a16]/40 hover:text-red-500 hover:bg-white shadow-lg border border-black/5 transition-all"
+          title={isHost ? "Terminate Game" : "Exit Game"}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Confirmation Modal */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-[3000] bg-[#0f1a16]/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-xs w-full shadow-2xl border border-black/5 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black mb-2 uppercase tracking-tight text-[#0f1a16]">
+              {isHost ? "Terminate Game?" : "Exit Game?"}
+            </h3>
+            <p className="text-[#2d4239]/60 text-sm font-medium mb-8 leading-relaxed">
+              {isHost 
+                ? "This will end the session for all explorers. Are you sure?" 
+                : "Your progress will be lost. Are you sure you want to leave?"}
+            </p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={onExit}
+                className="w-full py-4 bg-red-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-red-500/20 hover:bg-red-600 transition-colors"
+              >
+                {isHost ? "Terminate" : "Exit"}
+              </button>
+              <button 
+                onClick={() => setShowExitConfirm(false)}
+                className="w-full py-4 bg-[#f9fbfa] text-[#0f1a16]/40 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-white transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isCountingDown && (
         <div className="fixed inset-0 z-[2500] bg-[#0f1a16]/95 backdrop-blur-3xl flex flex-col items-center justify-center text-white animate-in fade-in duration-500">
            <p className="text-white/40 font-black uppercase tracking-[1em] text-[10px] mb-8">{strings.game.countdownTitle}</p>

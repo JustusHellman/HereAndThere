@@ -16,16 +16,60 @@ interface LobbyProps {
 
 const Lobby: React.FC<LobbyProps> = ({ gameState, isHost, onStart, currentPlayer, onBack, onKick }) => {
   const joinUrl = `${window.location.origin}${window.location.pathname}?join=${gameState.id}`;
+  const [showExitConfirm, setShowExitConfirm] = React.useState(false);
 
   return (
-    <div className="min-h-screen bg-[#f9fbfa] flex flex-col text-[#0f1a16] selection:bg-[#8c6b4f]/20">
+    <div className="min-h-screen bg-[#f9fbfa] flex flex-col text-[#0f1a16] selection:bg-[#8c6b4f]/20 relative">
+      {/* Exit/Terminate Button */}
+      <div className="fixed top-6 left-6 z-[2000]">
+        <button 
+          onClick={() => setShowExitConfirm(true)}
+          className="w-10 h-10 bg-white/80 backdrop-blur-md rounded-xl flex items-center justify-center text-[#0f1a16]/40 hover:text-red-500 hover:bg-white shadow-lg border border-black/5 transition-all"
+          title={isHost ? "Terminate Game" : "Exit Game"}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Confirmation Modal */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-[3000] bg-[#0f1a16]/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-xs w-full shadow-2xl border border-black/5 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black mb-2 uppercase tracking-tight text-[#0f1a16]">
+              {isHost ? "Terminate Game?" : "Exit Game?"}
+            </h3>
+            <p className="text-[#2d4239]/60 text-sm font-medium mb-8 leading-relaxed">
+              {isHost 
+                ? "This will end the session for all explorers. Are you sure?" 
+                : "Your progress will be lost. Are you sure you want to leave?"}
+            </p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={onBack}
+                className="w-full py-4 bg-red-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-red-500/20 hover:bg-red-600 transition-colors"
+              >
+                {isHost ? "Terminate" : "Exit"}
+              </button>
+              <button 
+                onClick={() => setShowExitConfirm(false)}
+                className="w-full py-4 bg-[#f9fbfa] text-[#0f1a16]/40 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-white transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white/70 backdrop-blur-xl p-10 pt-16 rounded-b-[4rem] shadow-[0_30px_60px_-15px_rgba(45,66,57,0.05)] border-b border-[#2d4239]/5 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-[#8c6b4f]/5 blur-[100px] rounded-full translate-x-1/2 -translate-y-1/2"></div>
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#2d4239]/5 blur-[100px] rounded-full -translate-x-1/2 translate-y-1/2"></div>
         
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-start relative z-10 gap-6">
           <div className="flex-1">
-             <button onClick={onBack} className="text-[#8c6b4f] text-[10px] font-black uppercase tracking-[0.4em] mb-6 flex items-center hover:opacity-70 transition-opacity">
+             <button onClick={() => setShowExitConfirm(true)} className="text-[#8c6b4f] text-[10px] font-black uppercase tracking-[0.4em] mb-6 flex items-center hover:opacity-70 transition-opacity">
                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
                {strings.lobby.backToDash}
              </button>
