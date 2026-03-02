@@ -11,6 +11,8 @@ export type GameSyncMessage =
   | { type: 'PLAYER_JOIN_REQUEST'; player: Player }
   | { type: 'PLAYER_GUESS_REQUEST'; playerId: string; guess: Location; distance: number }
   | { type: 'PLAYER_UNLOCK_REQUEST'; playerId: string }
+  | { type: 'PLAYER_LEAVE'; playerId: string }
+  | { type: 'PLAYER_KICKED'; targetId: string }
   | { type: 'HOST_REVEAL_REQUEST' }
   | { type: 'FORCE_REVEAL' }
   | { type: 'TERMINATE_SESSION' };
@@ -20,10 +22,23 @@ export const useGameSync = (
   onActionRequest: (action: any) => void,
   isHost: boolean, 
   gameState: GameState | null,
-  roomId?: string | null
+  roomId?: string | null,
+  onKicked?: (targetId: string) => void,
+  onSessionEnded?: () => void
 ) => {
   const channelRef = useRef<any>(null);
   const questionsCache = useRef<GameState['questions'] | null>(null);
+  
+  // Use refs for callbacks to prevent channel resubscription when they change
+  const onStateUpdateRef = useRef(onStateUpdate);
+  const onActionRequestRef = useRef(onActionRequest);
+  const onKickedRef = useRef(onKicked);
+  const onSessionEndedRef = useRef(onSessionEnded);
+
+  useEffect(() => { onStateUpdateRef.current = onStateUpdate; }, [onStateUpdate]);
+  useEffect(() => { onActionRequestRef.current = onActionRequest; }, [onActionRequest]);
+  useEffect(() => { onKickedRef.current = onKicked; }, [onKicked]);
+  useEffect(() => { onSessionEndedRef.current = onSessionEnded; }, [onSessionEnded]);
 
   const clearCache = useCallback(() => {
     questionsCache.current = null;
@@ -60,7 +75,6 @@ export const useGameSync = (
 
   const requestSync = useCallback(() => {
     if (channelRef.current) {
-      console.log("Requesting sync from host...");
       channelRef.current.send({
         type: 'broadcast',
         event: 'sync',
@@ -69,17 +83,15 @@ export const useGameSync = (
     }
   }, []);
 
-  // Determine which ID to use for the channel
   const activeChannelId = gameState?.id || roomId;
+  const gameStateRef = useRef(gameState);
+  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
 
   useEffect(() => {
     if (!activeChannelId) return;
 
-    console.log(`Subscribing to channel: game_${activeChannelId}`);
     const channel = supabase.channel(`game_${activeChannelId}`, {
-      config: {
-        broadcast: { self: false }
-      }
+      config: { broadcast: { self: false } }
     });
 
     channel.on('broadcast', { event: 'sync' }, ({ payload }) => {
@@ -87,55 +99,55 @@ export const useGameSync = (
       
       if (data.type === 'STATE_FULL') {
         if (!isHost) {
-          console.log("Received full state from host. Status:", data.state.status);
           questionsCache.current = data.state.questions;
-          onStateUpdate(data.state);
+          onStateUpdateRef.current(data.state);
         }
       } else if (data.type === 'STATE_DYNAMIC') {
         if (!isHost && questionsCache.current) {
-          console.log("Received dynamic state from host. New Status:", data.state.status);
           const reconstructedState = { 
             ...data.state, 
             questions: questionsCache.current 
           } as GameState;
-          onStateUpdate(reconstructedState);
+          onStateUpdateRef.current(reconstructedState);
         }
       } else if (data.type === 'TERMINATE_SESSION') {
-        if (!isHost) clearCache();
-      } else if (data.type === 'REQUEST_SYNC') {
-        if (isHost && gameState) {
-          console.log("Player requested sync. Sending full state...");
-          broadcast(gameState, true);
+        if (!isHost) {
+          onSessionEndedRef.current?.();
         }
+      } else if (data.type === 'PLAYER_KICKED') {
+        if (!isHost) {
+          onKickedRef.current?.(data.targetId);
+        }
+      } else if (data.type === 'PLAYER_LEAVE') {
+        // Host receives a notification that someone left voluntarily
+        if (isHost) onActionRequestRef.current({ type: 'KICK_PLAYER', payload: data.playerId });
+      } else if (data.type === 'REQUEST_SYNC') {
+        if (isHost && gameStateRef.current) broadcast(gameStateRef.current, true);
       } else if (data.type === 'PLAYER_JOIN_REQUEST') {
-        if (isHost) onActionRequest({ type: 'JOIN_PLAYER', payload: data.player });
+        if (isHost) onActionRequestRef.current({ type: 'JOIN_PLAYER', payload: data.player });
       } else if (data.type === 'PLAYER_GUESS_REQUEST') {
-        if (isHost) onActionRequest({ type: 'SUBMIT_GUESS', payload: { playerId: data.playerId, guess: data.guess, distance: data.distance } });
+        if (isHost) onActionRequestRef.current({ type: 'SUBMIT_GUESS', payload: { playerId: data.playerId, guess: data.guess, distance: data.distance } });
       } else if (data.type === 'PLAYER_UNLOCK_REQUEST') {
-        if (isHost) onActionRequest({ type: 'UNLOCK_GUESS', payload: data.playerId });
+        if (isHost) onActionRequestRef.current({ type: 'UNLOCK_GUESS', payload: data.playerId });
       } else if (data.type === 'HOST_REVEAL_REQUEST') {
-        if (isHost) onActionRequest({ type: 'SET_STATUS', payload: 'COUNTDOWN' });
+        if (isHost) onActionRequestRef.current({ type: 'SET_STATUS', payload: 'COUNTDOWN' });
       } else if (data.type === 'FORCE_REVEAL') {
-        if (isHost) onActionRequest({ type: 'FORCE_REVEAL' });
+        if (isHost) onActionRequestRef.current({ type: 'FORCE_REVEAL' });
       }
     });
 
     channel.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         channelRef.current = channel;
-        // If we are a player looking for a game, ask for state immediately
         if (!isHost) requestSync();
       }
     });
 
     return () => {
-      console.log(`Unsubscribing from channel: game_${activeChannelId}`);
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
       channelRef.current = null;
     };
-    // CRITICAL: We removed gameState.status from dependencies to prevent re-subscribing 
-    // when the host starts the game, which was causing dropped messages.
-  }, [activeChannelId, isHost, onStateUpdate, onActionRequest, broadcast, clearCache, requestSync]);
+  }, [activeChannelId, isHost, broadcast, requestSync]);
 
   return { broadcast, sendAction, requestSync, clearCache };
 };

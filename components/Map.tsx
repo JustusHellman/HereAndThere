@@ -41,7 +41,6 @@ const Map: React.FC<MapProps> = ({
       scrollWheelZoom: true,
       fadeAnimation: false,
       markerZoomAnimation: true,
-      tap: false,
       trackResize: true
     }).setView(startPos, zoom);
 

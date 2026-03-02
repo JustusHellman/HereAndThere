@@ -4,7 +4,7 @@ import { GameState, Player, Question, Location, User, AppView, Trail } from './t
 import { generateId, calculateDistance } from './utils';
 import { strings } from './i18n';
 import { gameReducer } from './gameReducer';
-import { useGameSync } from './useGameSync';
+import { useGameSync, GameSyncMessage } from './useGameSync';
 import { useTrails } from './hooks/useTrails';
 import QuizCreator from './components/QuizCreator';
 import Lobby from './components/Lobby';
@@ -25,25 +25,67 @@ const App: React.FC = () => {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null); 
   const [isJoining, setIsJoining] = useState(false);
-  const [hasBeenAccepted, setHasBeenAccepted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Use a ref for sendAction to break the circular dependency with handleExitGame
+  const sendActionRef = useRef<((action: GameSyncMessage) => void) | null>(null);
   const joinTimeoutRef = useRef<number | null>(null);
-
   const prevStatusRef = useRef<GameState['status'] | null>(null);
   const prevIndexRef = useRef<number>(-1);
 
   const { trails, saveTrail, deleteTrail, isLoading: isTrailsLoading } = useTrails(user);
   const [gameState, dispatch] = useReducer(gameReducer, null);
 
+  // handleExitGame is defined here and uses sendActionRef to avoid "used before declaration" error
+  const handleExitGame = useCallback((silent = false) => {
+    // 1. Snapshot the player identity before clearing
+    const pId = currentPlayer?.id;
+    const wasHost = isHost;
+
+    // 2. Clear state immediately to stop watchers and callbacks
+    if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
+    setCurrentPlayer(null);
+    setIsJoining(false);
+    setJoinCode(null);
+    dispatch({ type: 'EXIT_GAME' });
+
+    // 3. Notify the network via the ref
+    if (wasHost) {
+      localStorage.removeItem('locateit_active_host_state');
+      sendActionRef.current?.({ type: 'TERMINATE_SESSION' });
+    } else if (pId && !silent) {
+      sendActionRef.current?.({ type: 'PLAYER_LEAVE', playerId: pId });
+    }
+    
+    // 4. Update view
+    setView(wasHost ? 'DASHBOARD' : 'HOME');
+  }, [isHost, currentPlayer]);
+
   const { broadcast, sendAction, requestSync, clearCache } = useGameSync(
     useCallback((state) => dispatch({ type: 'SYNC_STATE', payload: state }), []),
     useCallback((action) => dispatch(action), []),
     isHost,
     gameState,
-    joinCode
+    joinCode,
+    useCallback((targetId: string) => {
+      // Targeted Kick: only alert if WE are the target
+      if (currentPlayer && targetId === currentPlayer.id) {
+        alert(strings.lobby.kickedDesc);
+        handleExitGame(true);
+      }
+    }, [currentPlayer, handleExitGame]),
+    useCallback(() => {
+      // Session Ended: Host disconnected explicitly
+      handleExitGame(true);
+    }, [handleExitGame])
   );
 
-  // Deep Link Handling
+  // Sync the sendAction function to our ref for handleExitGame to use
+  useEffect(() => {
+    sendActionRef.current = sendAction;
+  }, [sendAction]);
+
+  // Handle Join Deep Link
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const codeFromUrl = params.get('join');
@@ -51,7 +93,6 @@ const App: React.FC = () => {
       const cleanCode = codeFromUrl.trim().toUpperCase();
       setJoinCode(cleanCode);
       setView('JOIN');
-      // Clean up URL after grabbing code
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
@@ -59,7 +100,9 @@ const App: React.FC = () => {
   // Host: Broadcast changes
   useEffect(() => {
     if (isHost && gameState) {
+      // Accidental refresh protection: save host state to local storage
       localStorage.setItem('locateit_active_host_state', JSON.stringify(gameState));
+      
       const isStatusChange = gameState.status !== prevStatusRef.current;
       const isIndexChange = gameState.currentQuestionIndex !== prevIndexRef.current;
       const isNewGame = prevStatusRef.current === null;
@@ -75,46 +118,21 @@ const App: React.FC = () => {
   // Player: Sync loop when waiting for game data
   useEffect(() => {
     if ((view === 'JOIN' || view === 'LOBBY') && !isHost && joinCode) {
-      const interval = setInterval(requestSync, 3000);
+      const interval = setInterval(requestSync, 4000);
       return () => clearInterval(interval);
     }
   }, [view, isHost, requestSync, joinCode]);
 
-  // View Transition Watchdog
+  // Join Watchdog (Purely for the spinner)
   useEffect(() => {
-    if (gameState && (isHost || currentPlayer)) {
-      const inGameStatus = ['PLAYING', 'COUNTDOWN', 'RESULTS', 'SCOREBOARD', 'FINISHED'];
-      
-      // Auto-transition to board if game is active
-      if (inGameStatus.includes(gameState.status) && view !== 'PLAYING') {
-        setView('PLAYING');
-      }
-
-      // Player-side logic: Detect if we've been accepted or kicked
-      if (currentPlayer && !isHost) {
-        const isPresent = gameState.players.some(p => p.id === currentPlayer.id);
-        
-        // Success: We see ourselves in the host's list
-        if (isPresent && !hasBeenAccepted) {
-          setHasBeenAccepted(true);
-          setIsJoining(false);
-          if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
-        }
-
-        // Failure: We were in, but now we are gone (Kicked)
-        if (hasBeenAccepted && !isPresent && (view === 'LOBBY' || view === 'PLAYING')) {
-           alert(strings.lobby.kickedDesc);
-           handleExitGame();
-        }
-
-        // Timeout: We requested to join but never appeared
-        if (!isJoining && !hasBeenAccepted && view === 'LOBBY') {
-           setJoinError("Connection timeout. Host did not acknowledge join request.");
-           handleExitGame();
-        }
+    if (gameState && currentPlayer && !isHost && isJoining) {
+      const isPresent = gameState.players.some(p => p.id === currentPlayer.id);
+      if (isPresent) {
+        setIsJoining(false);
+        if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
       }
     }
-  }, [gameState?.status, currentPlayer, isHost, view, isJoining, hasBeenAccepted, gameState?.players]);
+  }, [gameState?.players, currentPlayer, isHost, isJoining]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('locateit_user');
@@ -173,9 +191,9 @@ const App: React.FC = () => {
 
     const savedId = localStorage.getItem('locateit_last_player_id');
     const existingById = gameState.players.find(p => p.id === savedId);
+    
     if (existingById) {
       setCurrentPlayer(existingById);
-      setHasBeenAccepted(true);
       setIsJoining(false);
       setIsHost(false);
       setView(gameState.status === 'LOBBY' ? 'LOBBY' : 'PLAYING');
@@ -184,30 +202,15 @@ const App: React.FC = () => {
 
     const newPlayer: Player = { id: generateId(), name, color, score: 0, hasGuessed: false };
     setCurrentPlayer(newPlayer);
-    setHasBeenAccepted(false);
     setIsHost(false);
     setIsJoining(true);
     
     if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
-    // Increased timeout to 10s to handle latent broadcasts
-    joinTimeoutRef.current = window.setTimeout(() => setIsJoining(false), 10000);
+    joinTimeoutRef.current = window.setTimeout(() => setIsJoining(false), 20000);
     
     localStorage.setItem('locateit_last_player_id', newPlayer.id);
     sendAction({ type: 'PLAYER_JOIN_REQUEST', player: newPlayer });
     setView('LOBBY');
-  };
-
-  const handleExitGame = () => {
-    if (isHost) {
-      localStorage.removeItem('locateit_active_host_state');
-      sendAction({ type: 'TERMINATE_SESSION' });
-    }
-    clearCache();
-    dispatch({ type: 'EXIT_GAME' });
-    setCurrentPlayer(null);
-    setHasBeenAccepted(false);
-    setJoinCode(null);
-    setView(isHost ? 'DASHBOARD' : 'HOME');
   };
 
   return (
@@ -244,8 +247,11 @@ const App: React.FC = () => {
           isHost={isHost} 
           onStart={() => dispatch({ type: 'SET_STATUS', payload: 'PLAYING' })} 
           currentPlayer={currentPlayer} 
-          onBack={handleExitGame} 
-          onKick={(id) => dispatch({ type: 'KICK_PLAYER', payload: id })} 
+          onBack={() => handleExitGame()} 
+          onKick={(id) => {
+            dispatch({ type: 'KICK_PLAYER', payload: id });
+            sendAction({ type: 'PLAYER_KICKED', targetId: id });
+          }} 
         />
       )}
       {view === 'PLAYING' && gameState && (
@@ -278,7 +284,7 @@ const App: React.FC = () => {
           onCountdownFinish={() => isHost && dispatch({ type: 'SET_STATUS', payload: 'RESULTS' })}
           onShowScoreboard={() => isHost && dispatch({ type: 'CALCULATE_SCORES' })}
           onNext={() => isHost && dispatch({ type: 'NEXT_ROUND' })} 
-          onExit={handleExitGame}
+          onExit={() => handleExitGame()}
         />
       )}
     </>
