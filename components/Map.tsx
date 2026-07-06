@@ -96,9 +96,9 @@ const Map: React.FC<MapProps> = ({
       map.setView([center!.lat, center!.lng], zoom);
       setTimeout(() => map.invalidateSize(), 50);
     }
-  }, [map, center, zoom, roundIndex]);
+  }, [map, roundIndex]);
 
-  useMapLayers(map, center?.lat, center?.lng, zoom, roundIndex);
+  useMapLayers(map, markers, lines, onLocationSelect);
 
   return (
     <div className="w-full h-full relative group bg-white">
