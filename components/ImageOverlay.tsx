@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, TouchEvent } from 'react';
 import { strings } from '../i18n';
 
 interface ImageOverlayProps {
@@ -12,13 +12,17 @@ const ImageOverlay: React.FC<ImageOverlayProps> = ({ imageUrl, onClose }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  const handleZoomIn = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  // Touch state for pinch-to-zoom
+  const initialDistance = useRef<number | null>(null);
+  const initialZoom = useRef<number>(1);
+
+  const handleZoomIn = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setZoom(prev => Math.min(prev + 0.5, 4));
   };
   
-  const handleZoomOut = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleZoomOut = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setZoom(prev => {
       const next = Math.max(prev - 0.5, 1);
       if (next === 1) setOffset({ x: 0, y: 0 });
@@ -39,12 +43,68 @@ const ImageOverlay: React.FC<ImageOverlayProps> = ({ imageUrl, onClose }) => {
 
   const handleMouseUp = () => setIsDragging(false);
 
+  // Touch handlers
+  const getDistance = (touches: React.TouchList) => {
+    return Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY
+    );
+  };
+
+  const handleTouchStart = (e: TouchEvent) => {
+    if (e.touches.length === 1) {
+      if (zoom > 1) {
+        setIsDragging(true);
+        setDragStart({ x: e.touches[0].clientX - offset.x, y: e.touches[0].clientY - offset.y });
+      }
+    } else if (e.touches.length === 2) {
+      setIsDragging(false);
+      initialDistance.current = getDistance(e.touches);
+      initialZoom.current = zoom;
+    }
+  };
+
+  const handleTouchMove = (e: TouchEvent) => {
+    if (e.touches.length === 1 && isDragging && zoom > 1) {
+      setOffset({ 
+        x: e.touches[0].clientX - dragStart.x, 
+        y: e.touches[0].clientY - dragStart.y 
+      });
+    } else if (e.touches.length === 2 && initialDistance.current !== null) {
+      const currentDistance = getDistance(e.touches);
+      const distanceDelta = currentDistance / initialDistance.current;
+      const nextZoom = Math.max(1, Math.min(initialZoom.current * distanceDelta, 4));
+      
+      setZoom(nextZoom);
+      if (nextZoom === 1) {
+        setOffset({ x: 0, y: 0 });
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    initialDistance.current = null;
+  };
+
+  // Prevent default scroll behavior
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   return (
     <div 
-      className="fixed inset-0 z-[2000] bg-black/95 flex items-center justify-center p-0 animate-in fade-in zoom-in duration-300 overflow-hidden" 
+      className="fixed inset-0 z-[2000] bg-black/95 flex items-center justify-center p-0 animate-in fade-in zoom-in duration-300 overflow-hidden touch-none" 
       onMouseMove={handleMouseMove} 
       onMouseUp={handleMouseUp} 
       onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       <div className="absolute top-8 right-8 z-[2010] flex space-x-4">
         <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-1 flex items-center border border-white/10">
