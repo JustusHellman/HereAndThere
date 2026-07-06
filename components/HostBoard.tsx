@@ -56,6 +56,15 @@ const HostBoard: React.FC<HostBoardProps> = ({
 
   const nonGuessedNames = gameState.players.filter(p => !p.hasGuessed).map(p => p.name).join(', ');
 
+  const sortedPlayers = [...gameState.players].sort((a, b) => {
+    if (a.hasGuessed && b.hasGuessed) {
+      return (a.lastDistance || Infinity) - (b.lastDistance || Infinity);
+    }
+    if (a.hasGuessed) return -1;
+    if (b.hasGuessed) return 1;
+    return 0;
+  });
+
   return (
     <div className="h-screen flex flex-col md:flex-row bg-[#f9fbfa] overflow-hidden">
       {showForceConfirm && (
@@ -94,7 +103,7 @@ const HostBoard: React.FC<HostBoardProps> = ({
 
         <div className="space-y-4 flex-1">
           <label className="text-[9px] font-black uppercase tracking-widest text-[#0f1a16]/40">{strings.lobby.playersJoined(gameState.players.length)}</label>
-          {gameState.players.map(p => (
+          {sortedPlayers.map(p => (
             <div key={p.id} className="p-4 bg-[#f9fbfa] rounded-2xl border border-black/5 flex items-center justify-between space-x-4">
               <div className="flex items-center space-x-3 overflow-hidden flex-1">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-xs shrink-0" style={{ backgroundColor: p.color }}>{p.name.charAt(0)}</div>
