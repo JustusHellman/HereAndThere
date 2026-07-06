@@ -89,6 +89,17 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
     color: p.color 
   })) : [], [isRoundFinished, gameState.players, currentQ.location]);
 
+  const sortedPlayers = useMemo(() => {
+    return [...gameState.players].sort((a, b) => {
+      if (a.hasGuessed && b.hasGuessed) {
+        return (a.lastDistance || Infinity) - (b.lastDistance || Infinity);
+      }
+      if (a.hasGuessed) return -1;
+      if (b.hasGuessed) return 1;
+      return 0;
+    });
+  }, [gameState.players]);
+
   return (
     <div className="h-screen flex flex-col bg-[#f9fbfa] overflow-hidden selection:bg-[#8c6b4f]/20">
       <div className="bg-white/70 backdrop-blur-xl rounded-b-[2rem] p-5 shadow-sm border-b border-[#2d4239]/5 flex justify-between items-center z-[100] shrink-0">
@@ -127,7 +138,7 @@ const PlayerBoard: React.FC<PlayerBoardProps> = ({
                   <h2 className="text-xl font-black py-4 uppercase tracking-tight text-[#0f1a16] shrink-0">{strings.game.roundResults}</h2>
                   <div className="flex-1 w-full overflow-y-auto px-2 pb-6 scroll-smooth-touch">
                     <div className="space-y-3 w-full max-w-sm mx-auto">
-                      {gameState.players.map(p => (
+                      {sortedPlayers.map(p => (
                         <div key={p.id} className="flex justify-between items-center bg-white p-4 rounded-[1.5rem] border border-[#2d4239]/5 shadow-sm">
                           <div className="flex items-center space-x-4">
                             <div className="w-4 h-4 rounded-[0.4rem] shadow-sm" style={{ backgroundColor: p.color }} />
